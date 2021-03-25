@@ -105,6 +105,10 @@ void            yield(void);
 int             either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
 int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
+void            trace(int);
+#define         IS_BIT_ON(bit)             (p->mask & (1 << bit))
+#define         GENERIC_TRACE_PRINT(bit)   (printf("syscall %s -> %d\n",syscalls_to_string[bit - 1],p->trapframe->a0))
+#define         TRACE_CHECK_AND_PRINT(bit) if(IS_BIT_ON(bit)) GENERIC_TRACE_PRINT(bit)     
 
 // swtch.S
 void            swtch(struct context*, struct context*);
@@ -139,6 +143,7 @@ int             argaddr(int, uint64 *);
 int             fetchstr(uint64, char*, int);
 int             fetchaddr(uint64, uint64*);
 void            syscall();
+extern const char* syscalls_to_string[22];
 
 // trap.c
 extern uint     ticks;

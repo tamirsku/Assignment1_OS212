@@ -53,6 +53,30 @@ int fork1(void);  // Fork but panics on failure.
 void panic(char*);
 struct cmd *parsecmd(char*);
 
+void run_cmd_on_path(int pathfd, struct execcmd *cmd){
+  if(pathfd == -1) return;
+  int   commandLen = strlen(cmd->argv[0]) + 1, prefixLen = 0;
+  char  buf[999];
+  char  commandbuf[999];
+  char* j = buf;
+  int   i = 0;
+  if(!read(pathfd, buf, sizeof(buf))) return; // Read file into buf
+
+  while(*j){
+    if(*j == ':'){
+      memcpy(commandbuf, buf + i, prefixLen);
+      safestrcpy(commandbuf + prefixLen, cmd->argv[0], commandLen);
+      exec(commandbuf, cmd->argv);
+      i += prefixLen + 1;
+      prefixLen = 0;
+    }
+    else{
+      ++prefixLen;
+    }
+    ++j;
+  }
+}
+
 // Execute cmd.  Never returns.
 void
 runcmd(struct cmd *cmd)
@@ -66,7 +90,7 @@ runcmd(struct cmd *cmd)
 
   if(cmd == 0)
     exit(1);
-
+  
   switch(cmd->type){
   default:
     panic("runcmd");
@@ -76,6 +100,9 @@ runcmd(struct cmd *cmd)
     if(ecmd->argv[0] == 0)
       exit(1);
     exec(ecmd->argv[0], ecmd->argv);
+    // PATH CODE HERE
+    run_cmd_on_path(open("/PATH", O_RDONLY),ecmd);
+    // END PATH CODE
     fprintf(2, "exec %s failed\n", ecmd->argv[0]);
     break;
 

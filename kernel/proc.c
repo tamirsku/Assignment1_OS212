@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "syscall.h"
 
 struct cpu cpus[NCPU];
 
@@ -119,6 +120,9 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
+  p->mask = 0;
+  memset(&p->per, 0, sizeof(p->per));
+  p->per.ctime = ticks;
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
@@ -164,6 +168,7 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  memset(&p->per, 0, sizeof(p->per));
 }
 
 // Create a user page table for a given process,
@@ -309,6 +314,7 @@ fork(void)
 
   acquire(&wait_lock);
   np->parent = p;
+  np->mask = p->mask;
   release(&wait_lock);
 
   acquire(&np->lock);
@@ -340,6 +346,8 @@ void
 exit(int status)
 {
   struct proc *p = myproc();
+  p->per.ttime = ticks;
+  printf("ticks %d\n",ticks);
 
   if(p == initproc)
     panic("init exiting");
@@ -653,4 +661,10 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+void
+trace(int mask){
+  struct proc *p = myproc();
+  p->mask = mask;
 }

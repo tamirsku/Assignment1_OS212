@@ -80,6 +80,15 @@ struct trapframe {
   /* 280 */ uint64 t6;
 };
 
+struct perf {
+  int ctime;       // process creation time.
+  int ttime;       // process termination time.
+  int stime;       // the total time the process spent in the SLEEPING state.
+  int retime;      // the total time the process spent in the RUNNABLE state.
+  int rutime;      // the total time the process spent in the RUNNING state.
+  float bursttime; // approximate estimated burst time (as specified in task 4.3)
+};
+
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
 // Per-process state
@@ -92,6 +101,7 @@ struct proc {
   int killed;                  // If non-zero, have been killed
   int xstate;                  // Exit status to be returned to parent's wait
   int pid;                     // Process ID
+  int mask;                    // Mask for trace
 
   // proc_tree_lock must be held when using this:
   struct proc *parent;         // Parent process
@@ -104,5 +114,7 @@ struct proc {
   struct context context;      // swtch() here to run process
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
+  struct perf per;            // Assignemt 1, Task 3 OS212 
   char name[16];               // Process name (debugging)
+
 };
