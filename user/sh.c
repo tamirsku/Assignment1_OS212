@@ -3,6 +3,7 @@
 #include "kernel/types.h"
 #include "user/user.h"
 #include "kernel/fcntl.h"
+#include "kernel/param.h"
 
 // Parsed command representation
 #define EXEC  1
@@ -56,12 +57,16 @@ struct cmd *parsecmd(char*);
 void run_cmd_on_path(int pathfd, struct execcmd *cmd){
   if(pathfd == -1) return;
   int   commandLen = strlen(cmd->argv[0]) + 1, prefixLen = 0;
-  char  buf[999];
-  char  commandbuf[999];
+  char  buf[MAXPATH];
+  char  commandbuf[MAXPATH];
   char* j = buf;
   int   i = 0;
-  if(!read(pathfd, buf, sizeof(buf))) return; // Read file into buf
-
+  if(!read(pathfd, buf, sizeof(buf))) {
+    close(pathfd);
+    return;
+  } // Read file into buf
+  
+  close(pathfd);
   while(*j){
     if(*j == ':'){
       memcpy(commandbuf, buf + i, prefixLen);

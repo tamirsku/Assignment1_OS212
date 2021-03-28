@@ -11,6 +11,8 @@ struct cpu cpus[NCPU];
 
 struct proc proc[NPROC];
 
+struct spinlock proc_table_lock;
+
 struct proc *initproc;
 
 int nextpid = 1;
@@ -121,8 +123,12 @@ found:
   p->pid = allocpid();
   p->state = USED;
   p->mask = 0;
+  p->curr_quantum = 0;
   memset(&p->per, 0, sizeof(p->per));
   p->per.ctime = ticks;
+  p->last_running_time = ticks;
+  p->last_sleeping_time = 0;
+  // p->per.bursttime = QUANTUM; << FLOAT
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
@@ -168,6 +174,8 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  p->mask = 0;
+  p->curr_quantum = 0;
   memset(&p->per, 0, sizeof(p->per));
 }
 
@@ -234,6 +242,8 @@ userinit(void)
 
   p = allocproc();
   initproc = p;
+
+  initlock(&proc_table_lock,"table lock");
   
   // allocate one user page and copy init's instructions
   // and data into it.
@@ -248,6 +258,7 @@ userinit(void)
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
+  p->last_runnable_time = ticks;
 
   release(&p->lock);
 }
@@ -319,6 +330,7 @@ fork(void)
 
   acquire(&np->lock);
   np->state = RUNNABLE;
+  np->last_runnable_time = ticks;
   release(&np->lock);
 
   return pid;
@@ -347,7 +359,6 @@ exit(int status)
 {
   struct proc *p = myproc();
   p->per.ttime = ticks;
-  printf("ticks %d\n",ticks);
 
   if(p == initproc)
     panic("init exiting");
@@ -377,7 +388,9 @@ exit(int status)
   acquire(&p->lock);
 
   p->xstate = status;
+  p->per.rutime += ticks - p->last_running_time;
   p->state = ZOMBIE;
+  p->per.ttime = ticks;
 
   release(&wait_lock);
 
@@ -449,9 +462,14 @@ scheduler(void)
   struct cpu *c = mycpu();
   
   c->proc = 0;
+
   for(;;){
     // Avoid deadlock by ensuring that devices can interrupt.
     intr_on();
+
+    // ---------------------------- DEFAULT ------------------------------
+
+    #ifdef DEFAULT // Scheduler set to default
 
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
@@ -459,17 +477,68 @@ scheduler(void)
         // Switch to chosen process.  It is the process's job
         // to release its lock and then reacquire it
         // before jumping back to us.
+        p->per.retime += ticks - p->last_runnable_time;
         p->state = RUNNING;
         c->proc = p;
+        p->last_running_time = ticks;
         swtch(&c->context, &p->context);
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
       }
+      p->per.rutime +=  ticks - p->last_running_time;
+      // p->per.bursttime = (ticks - p->last_running_time)*ALPHA + p->per.bursttime*(1-ALPHA);
       release(&p->lock);
     }
+
+    // -------------------------------- FCFS --------------------------------
+
+    #elif FCFS // Scheduler set to First Come First Serve (SCHEDFLAG= FCFS)
+
+    struct proc* firstProc = 0;
+
+    acquire(&proc_table_lock);
+
+    for(p = proc; p < &proc[NPROC]; p++) {
+      if(p->state == RUNNABLE) {
+        if(!firstProc || firstProc->last_running_time > p->last_running_time){
+          firstProc = p;
+        }
+      }
+    }
+
+    if(firstProc){
+      acquire(&firstProc->lock);
+
+      p->per.retime += ticks - p->last_runnable_time;
+      firstProc->state = RUNNING; // Release the table only when firstProc start to run
+      release(&proc_table_lock);
+      c->proc = firstProc;
+      firstProc->last_running_time = ticks;
+      swtch(&c->context, &firstProc->context);
+
+      c->proc = 0;
+
+      p->per.rutime +=  ticks - p->last_running_time;
+      release(&firstProc->lock);
+    }
+    else {
+      release(&proc_table_lock);
+    }
+
+    // ------------------------------------- SRT -----------------------------------------
+  
+    #elif SRT // Scheduler set to Shortest Remaining Time (SCHEDFLAG= SRT)
+
+    // ------------------------------------- CFSD ----------------------------------------
+    
+    #elif CFSD // Scheduler set to Completely Fair Schedular with Priority decay(SCHEDFLAG=CFSD).
+
+    #endif
+
   }
+
 }
 
 // Switch to scheduler.  Must hold only p->lock
@@ -505,7 +574,11 @@ yield(void)
 {
   struct proc *p = myproc();
   acquire(&p->lock);
+
+  p->per.rutime += ticks - p->last_running_time;
   p->state = RUNNABLE;
+  p->last_runnable_time = ticks;
+
   sched();
   release(&p->lock);
 }
@@ -548,9 +621,12 @@ sleep(void *chan, struct spinlock *lk)
   acquire(&p->lock);  //DOC: sleeplock1
   release(lk);
 
+  p->per.rutime += ticks - p->last_running_time;
+
   // Go to sleep.
   p->chan = chan;
   p->state = SLEEPING;
+  p->last_sleeping_time = ticks;
 
   sched();
 
@@ -573,7 +649,9 @@ wakeup(void *chan)
     if(p != myproc()){
       acquire(&p->lock);
       if(p->state == SLEEPING && p->chan == chan) {
+        p->per.stime += ticks - p->last_sleeping_time;
         p->state = RUNNABLE;
+        p->last_runnable_time = ticks;
       }
       release(&p->lock);
     }
@@ -594,7 +672,9 @@ kill(int pid)
       p->killed = 1;
       if(p->state == SLEEPING){
         // Wake process from sleep().
+        p->per.stime += ticks - p->last_sleeping_time;
         p->state = RUNNABLE;
+        p->last_runnable_time = ticks;
       }
       release(&p->lock);
       return 0;
@@ -668,3 +748,4 @@ trace(int mask){
   struct proc *p = myproc();
   p->mask = mask;
 }
+

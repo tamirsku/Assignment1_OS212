@@ -126,3 +126,10 @@ sys_trace(void)
 
   return 0;
 }
+
+uint64
+sys_wait_stat(void)
+{
+  // TODO
+  return 0;
+}

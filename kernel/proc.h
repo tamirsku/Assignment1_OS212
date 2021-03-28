@@ -101,7 +101,6 @@ struct proc {
   int killed;                  // If non-zero, have been killed
   int xstate;                  // Exit status to be returned to parent's wait
   int pid;                     // Process ID
-  int mask;                    // Mask for trace
 
   // proc_tree_lock must be held when using this:
   struct proc *parent;         // Parent process
@@ -116,5 +115,9 @@ struct proc {
   struct inode *cwd;           // Current directory
   struct perf per;            // Assignemt 1, Task 3 OS212 
   char name[16];               // Process name (debugging)
-
+  int mask;                    // Mask for trace
+  int curr_quantum;            // How much time the process running ( = zero if not running / get kicked out)
+  int last_running_time;       // Last tick that the process was running
+  int last_sleeping_time;       // Last tick that the process was sleeping
+  int last_runnable_time;       // Last tick that the process was runnable
 };

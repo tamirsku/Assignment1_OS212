@@ -1,3 +1,5 @@
+#include "param.h"
+
 struct buf;
 struct context;
 struct file;
@@ -143,7 +145,7 @@ int             argaddr(int, uint64 *);
 int             fetchstr(uint64, char*, int);
 int             fetchaddr(uint64, uint64*);
 void            syscall();
-extern const char* syscalls_to_string[22];
+extern const char* syscalls_to_string[NSYSCALLS];
 
 // trap.c
 extern uint     ticks;
