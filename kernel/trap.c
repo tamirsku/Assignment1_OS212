@@ -10,6 +10,7 @@ struct spinlock tickslock;
 uint ticks;
 
 extern char trampoline[], uservec[], userret[];
+extern struct proc proc[NPROC];
 
 // in kernelvec.S, calls kerneltrap().
 void kernelvec();
@@ -128,6 +129,32 @@ usertrapret(void)
   ((void (*)(uint64,uint64))fn)(TRAPFRAME, satp);
 }
 
+void
+update_perf_stats(){
+  struct proc *p;
+  for(p = proc; p < &proc[NPROC]; p++) {
+      acquire(&p->lock);
+      switch (p->state)
+      {
+      case RUNNABLE:
+        p->per.retime++;
+        break;
+
+      case RUNNING:
+        p->per.rutime++;
+        break;
+
+      case SLEEPING:
+        p->per.stime++;
+        break;
+      
+      default:
+        break;
+      }
+      release(&p->lock);
+    }
+}
+
 // interrupts and exceptions from kernel code go here via kernelvec,
 // on whatever the current kernel stack is.
 void 
@@ -152,15 +179,20 @@ kerneltrap()
     panic("kerneltrap");
   }
 
-  #ifndef FCFS // Don't send timer interupts in FCFS
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2 && running_proc != 0 && running_proc->state == RUNNING && ++running_proc->curr_quantum == QUANTUM){
+  if(which_dev == 2){
+    update_perf_stats();
+
+#ifndef FCFS // Don't send timer interupts in FCFS, Update perf & yield if needed
+    
+    if(running_proc != 0 && running_proc->state == RUNNING && ++running_proc->curr_quantum == QUANTUM){
       running_proc->curr_quantum = 0;
       yield();
-  }
+    }
 
-  #endif
+#endif
+  }
 
   // the yield() may have caused some traps to occur,
   // so restore trap registers for use by kernelvec.S's sepc instruction.

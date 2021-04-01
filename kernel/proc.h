@@ -1,3 +1,5 @@
+#include "performence.h"
+
 // Saved registers for kernel context switches.
 struct context {
   uint64 ra;
@@ -80,15 +82,6 @@ struct trapframe {
   /* 280 */ uint64 t6;
 };
 
-struct perf {
-  int ctime;       // process creation time.
-  int ttime;       // process termination time.
-  int stime;       // the total time the process spent in the SLEEPING state.
-  int retime;      // the total time the process spent in the RUNNABLE state.
-  int rutime;      // the total time the process spent in the RUNNING state.
-  float bursttime; // approximate estimated burst time (as specified in task 4.3)
-};
-
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
 // Per-process state
@@ -118,6 +111,7 @@ struct proc {
   int mask;                    // Mask for trace
   int curr_quantum;            // How much time the process running ( = zero if not running / get kicked out)
   int last_running_time;       // Last tick that the process was running
-  int last_sleeping_time;       // Last tick that the process was sleeping
-  int last_runnable_time;       // Last tick that the process was runnable
+  // int last_sleeping_time;       // Last tick that the process was sleeping
+  // int last_runnable_time;       // Last tick that the process was runnable
 };
+

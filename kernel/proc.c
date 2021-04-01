@@ -126,9 +126,7 @@ found:
   p->curr_quantum = 0;
   memset(&p->per, 0, sizeof(p->per));
   p->per.ctime = ticks;
-  p->last_running_time = ticks;
-  p->last_sleeping_time = 0;
-  // p->per.bursttime = QUANTUM; << FLOAT
+  p->per.average_bursttime = QUANTUM*DIVPARAM;
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
@@ -258,7 +256,7 @@ userinit(void)
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
-  p->last_runnable_time = ticks;
+  // p->last_runnable_time = ticks;
 
   release(&p->lock);
 }
@@ -330,7 +328,7 @@ fork(void)
 
   acquire(&np->lock);
   np->state = RUNNABLE;
-  np->last_runnable_time = ticks;
+  // np->last_runnable_time = ticks;
   release(&np->lock);
 
   return pid;
@@ -388,7 +386,7 @@ exit(int status)
   acquire(&p->lock);
 
   p->xstate = status;
-  p->per.rutime += ticks - p->last_running_time;
+  // p->per.rutime += ticks - p->last_running_time;
   p->state = ZOMBIE;
   p->per.ttime = ticks;
 
@@ -402,10 +400,11 @@ exit(int status)
 // Wait for a child process to exit and return its pid.
 // Return -1 if this process has no children.
 int
-wait(uint64 addr)
+wait(uint64 addr,uint64 per_ptr)
 {
   struct proc *np;
   int havekids, pid;
+  int ret = 0;
   struct proc *p = myproc();
 
   acquire(&wait_lock);
@@ -428,10 +427,14 @@ wait(uint64 addr)
             release(&wait_lock);
             return -1;
           }
+          if(per_ptr != 0){
+            ret = copyout(p->pagetable, per_ptr, (char *)&np->per,
+                                  sizeof(np->per));
+          }
           freeproc(np);
           release(&np->lock);
           release(&wait_lock);
-          return pid;
+          return ret < 0 ? -1 : pid;
         }
         release(&np->lock);
       }
@@ -477,18 +480,16 @@ scheduler(void)
         // Switch to chosen process.  It is the process's job
         // to release its lock and then reacquire it
         // before jumping back to us.
-        p->per.retime += ticks - p->last_runnable_time;
+        // p->per.retime += ticks - p->last_runnable_time;
         p->state = RUNNING;
         c->proc = p;
-        p->last_running_time = ticks;
+        // p->last_running_time = ticks;
         swtch(&c->context, &p->context);
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
       }
-      p->per.rutime +=  ticks - p->last_running_time;
-      // p->per.bursttime = (ticks - p->last_running_time)*ALPHA + p->per.bursttime*(1-ALPHA);
       release(&p->lock);
     }
 
@@ -523,7 +524,7 @@ scheduler(void)
       p->per.rutime +=  ticks - p->last_running_time;
       release(&firstProc->lock);
     }
-    else {
+    else { //No process to run - avoid null
       release(&proc_table_lock);
     }
 
@@ -573,11 +574,14 @@ void
 yield(void)
 {
   struct proc *p = myproc();
+  int curr_running_time;
   acquire(&p->lock);
 
-  p->per.rutime += ticks - p->last_running_time;
+  curr_running_time = ticks - p->last_running_time;
+  p->per.average_bursttime = curr_running_time*ALPHA + ((DIVPARAM-ALPHA)*p->per.average_bursttime)/DIVPARAM;
+
   p->state = RUNNABLE;
-  p->last_runnable_time = ticks;
+  // p->last_runnable_time = ticks;
 
   sched();
   release(&p->lock);
@@ -610,6 +614,7 @@ void
 sleep(void *chan, struct spinlock *lk)
 {
   struct proc *p = myproc();
+  int curr_running_time;
   
   // Must acquire p->lock in order to
   // change p->state and then call sched.
@@ -621,12 +626,14 @@ sleep(void *chan, struct spinlock *lk)
   acquire(&p->lock);  //DOC: sleeplock1
   release(lk);
 
-  p->per.rutime += ticks - p->last_running_time;
+  // p->per.rutime += ticks - p->last_running_time;
 
   // Go to sleep.
   p->chan = chan;
   p->state = SLEEPING;
-  p->last_sleeping_time = ticks;
+
+  curr_running_time = ticks - p->last_running_time;
+  p->per.average_bursttime = curr_running_time*ALPHA + ((DIVPARAM-ALPHA)*p->per.average_bursttime)/DIVPARAM;
 
   sched();
 
@@ -649,9 +656,7 @@ wakeup(void *chan)
     if(p != myproc()){
       acquire(&p->lock);
       if(p->state == SLEEPING && p->chan == chan) {
-        p->per.stime += ticks - p->last_sleeping_time;
         p->state = RUNNABLE;
-        p->last_runnable_time = ticks;
       }
       release(&p->lock);
     }
@@ -672,9 +677,7 @@ kill(int pid)
       p->killed = 1;
       if(p->state == SLEEPING){
         // Wake process from sleep().
-        p->per.stime += ticks - p->last_sleeping_time;
         p->state = RUNNABLE;
-        p->last_runnable_time = ticks;
       }
       release(&p->lock);
       return 0;
@@ -748,4 +751,6 @@ trace(int mask){
   struct proc *p = myproc();
   p->mask = mask;
 }
+
+
 

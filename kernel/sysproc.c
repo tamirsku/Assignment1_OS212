@@ -41,7 +41,7 @@ sys_wait(void)
   uint64 p;
   if(argaddr(0, &p) < 0)
     return -1;
-  return wait(p);
+  return wait(p,0);
 }
 
 uint64
@@ -129,7 +129,15 @@ sys_trace(void)
 
 uint64
 sys_wait_stat(void)
-{
-  // TODO
-  return 0;
+{ 
+  uint64 p;
+  uint64 per;
+
+  if(argaddr(0, &p) < 0)
+    return -1;
+
+  if(argaddr(1, &per) < 0)
+    return -1;
+  
+  return wait(p,per);
 }
