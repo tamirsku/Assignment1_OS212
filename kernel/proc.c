@@ -117,6 +117,7 @@ allocproc(void)
       release(&p->lock);
     }
   }
+  printf("no place in tbl\n");
   return 0;
 
 found:
@@ -126,6 +127,7 @@ found:
   p->curr_quantum = 0;
   memset(&p->per, 0, sizeof(p->per));
   p->per.average_bursttime = QUANTUM*DIVPARAM;
+  p->last_running_time = ticks;
   p->priority = NORMAL_PRIORITY;
 
   // Allocate a trapframe page.
@@ -174,6 +176,7 @@ freeproc(struct proc *p)
   p->state = UNUSED;
   p->mask = 0;
   p->curr_quantum = 0;
+  p->last_running_time = 0;
   memset(&p->per, 0, sizeof(p->per));
 }
 
@@ -292,6 +295,7 @@ fork(void)
 
   // Allocate process.
   if((np = allocproc()) == 0){
+    printf("no proc alloced\n");
     return -1;
   }
 
@@ -318,8 +322,6 @@ fork(void)
   safestrcpy(np->name, p->name, sizeof(p->name));
 
   pid = np->pid;
-  np->mask = p->mask;
-  np->priority = p->priority;
 
   release(&np->lock);
 
@@ -330,6 +332,8 @@ fork(void)
   acquire(&np->lock);
   np->state = RUNNABLE;
   np->per.ctime = ticks;
+  np->mask = p->mask;
+  np->priority = p->priority;
   release(&np->lock);
 
   return pid;
@@ -486,9 +490,10 @@ void
 scheduler(void)
 {
   struct proc* p;
-  struct cpu * c         = mycpu();
-  struct proc* firstProc = 0;
-  
+  struct cpu * c = mycpu();
+  // int entry_time = ticks;
+  int curr_burst = 0;
+
   c->proc = 0;
 
   for(;;){
@@ -512,12 +517,17 @@ scheduler(void)
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
-        c->proc = firstProc;
+        c->proc = 0;
+
+        curr_burst = ticks - p->last_running_time;
+        p->per.average_bursttime = curr_burst*ALPHA + ((DIVPARAM-ALPHA)*p->per.average_bursttime);
       }
       release(&p->lock);
     }
 
     #else // !DEFAULT
+
+    struct proc* firstProc = 0;
 
     acquire(&proc_table_lock);
 
@@ -555,7 +565,7 @@ scheduler(void)
     for(p = proc; p < &proc[NPROC]; p++) {
       if(p->state == RUNNABLE) {
         curr_val = RUNNING_TIME(p) + SLEEPING_TIME(p) == 0 ? 0 : CALC_PRIORITY_VAL(p); 
-        if(!firstProc || firstProc->per.average_bursttime > p->per.average_bursttime){
+        if(!firstProc || min_val > curr_val){
           firstProc = p;
           min_val   = curr_val;
         }
@@ -574,6 +584,9 @@ scheduler(void)
       swtch(&c->context, &firstProc->context);
 
       c->proc = 0;
+      curr_burst = ticks - firstProc->last_running_time;
+      firstProc->per.average_bursttime = curr_burst*ALPHA + ((DIVPARAM-ALPHA)*firstProc->per.average_bursttime);
+      firstProc->last_running_time = ticks;
 
       release(&firstProc->lock);
     }
@@ -658,7 +671,6 @@ void
 sleep(void *chan, struct spinlock *lk)
 {
   struct proc *p = myproc();
-  int curr_running_time;
   
   // Must acquire p->lock in order to
   // change p->state and then call sched.
@@ -673,9 +685,6 @@ sleep(void *chan, struct spinlock *lk)
   // Go to sleep.
   p->chan = chan;
   p->state = SLEEPING;
-
-  curr_running_time = ticks - p->last_running_time;
-  p->per.average_bursttime = curr_running_time*ALPHA + ((DIVPARAM-ALPHA)*p->per.average_bursttime)/DIVPARAM;
 
   sched();
 

@@ -2781,7 +2781,7 @@ main(int argc, char *argv[])
     {pgbug, "pgbug" },
     {sbrkbugs, "sbrkbugs" },
     // {badwrite, "badwrite" },
-    {badarg, "badarg" },
+    // {badarg, "badarg" },
     {reparent, "reparent" },
     {twochildren, "twochildren"},
     {forkfork, "forkfork"},
@@ -2817,7 +2817,9 @@ main(int argc, char *argv[])
     {mem, "mem"},
     {pipe1, "pipe1"},
     {killstatus, "killstatus"},
+    #ifndef FCFS
     {preempt, "preempt"},
+    #endif
     {exitwait, "exitwait"},
     {rmdot, "rmdot"},
     {fourteen, "fourteen"},
