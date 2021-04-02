@@ -4,8 +4,8 @@
 #include "riscv.h"
 #include "spinlock.h"
 #include "proc.h"
-#include "defs.h"
 #include "syscall.h"
+#include "defs.h"
 
 struct cpu cpus[NCPU];
 
@@ -125,8 +125,8 @@ found:
   p->mask = 0;
   p->curr_quantum = 0;
   memset(&p->per, 0, sizeof(p->per));
-  p->per.ctime = ticks;
   p->per.average_bursttime = QUANTUM*DIVPARAM;
+  p->priority = NORMAL_PRIORITY;
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
@@ -256,7 +256,7 @@ userinit(void)
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
-  // p->last_runnable_time = ticks;
+  p->per.ctime = ticks;
 
   release(&p->lock);
 }
@@ -318,17 +318,18 @@ fork(void)
   safestrcpy(np->name, p->name, sizeof(p->name));
 
   pid = np->pid;
+  np->mask = p->mask;
+  np->priority = p->priority;
 
   release(&np->lock);
 
   acquire(&wait_lock);
   np->parent = p;
-  np->mask = p->mask;
   release(&wait_lock);
 
   acquire(&np->lock);
   np->state = RUNNABLE;
-  // np->last_runnable_time = ticks;
+  np->per.ctime = ticks;
   release(&np->lock);
 
   return pid;
@@ -356,7 +357,6 @@ void
 exit(int status)
 {
   struct proc *p = myproc();
-  p->per.ttime = ticks;
 
   if(p == initproc)
     panic("init exiting");
@@ -386,7 +386,6 @@ exit(int status)
   acquire(&p->lock);
 
   p->xstate = status;
-  // p->per.rutime += ticks - p->last_running_time;
   p->state = ZOMBIE;
   p->per.ttime = ticks;
 
@@ -451,6 +450,31 @@ wait(uint64 addr,uint64 per_ptr)
   }
 }
 
+int get_decay_factor(process_priority_e p){
+  switch (p)
+  {
+  case TEST_HIGH_PRIORITY:
+    return 1;
+    break;
+
+  case HIGH_PRIORITY:
+    return 3;
+    break;
+  
+  case NORMAL_PRIORITY:
+    return 5;
+    break;
+
+  case LOW_PRIORITY:
+    return 7;
+    break;
+
+  default: // TEST_LOW_PRIORITY
+    return 25;
+    break;
+  }
+}
+
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
 // Scheduler never returns.  It loops, doing:
@@ -461,8 +485,9 @@ wait(uint64 addr,uint64 per_ptr)
 void
 scheduler(void)
 {
-  struct proc *p;
-  struct cpu *c = mycpu();
+  struct proc* p;
+  struct cpu * c         = mycpu();
+  struct proc* firstProc = 0;
   
   c->proc = 0;
 
@@ -480,26 +505,25 @@ scheduler(void)
         // Switch to chosen process.  It is the process's job
         // to release its lock and then reacquire it
         // before jumping back to us.
-        // p->per.retime += ticks - p->last_runnable_time;
         p->state = RUNNING;
         c->proc = p;
-        // p->last_running_time = ticks;
+        p->last_running_time = ticks;
         swtch(&c->context, &p->context);
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
-        c->proc = 0;
+        c->proc = firstProc;
       }
       release(&p->lock);
     }
 
-    // -------------------------------- FCFS --------------------------------
-
-    #elif FCFS // Scheduler set to First Come First Serve (SCHEDFLAG= FCFS)
-
-    struct proc* firstProc = 0;
+    #else // !DEFAULT
 
     acquire(&proc_table_lock);
+
+    // ------------------------------------- FCFS -----------------------------------------
+
+    #ifdef FCFS // Scheduler set to First Come First Serve (SCHEDFLAG= FCFS)
 
     for(p = proc; p < &proc[NPROC]; p++) {
       if(p->state == RUNNABLE) {
@@ -509,34 +533,55 @@ scheduler(void)
       }
     }
 
+    // ------------------------------------- SRT -----------------------------------------
+
+    #elif SRT // Scheduler set to Shortest Remaining Time (SCHEDFLAG= SRT)
+
+    for(p = proc; p < &proc[NPROC]; p++) {
+      if(p->state == RUNNABLE) {
+        if(!firstProc || firstProc->per.average_bursttime > p->per.average_bursttime){
+          firstProc = p;
+        }
+      }
+    }
+
+    // ------------------------------------- CFSD ---------------------------------------
+
+    #elif CFSD // Scheduler set to Completely Fair Schedular with Priority decay(SCHEDFLAG=CFSD).
+
+    int min_val  = -1;
+    int curr_val = -1;
+
+    for(p = proc; p < &proc[NPROC]; p++) {
+      if(p->state == RUNNABLE) {
+        curr_val = RUNNING_TIME(p) + SLEEPING_TIME(p) == 0 ? 0 : CALC_PRIORITY_VAL(p); 
+        if(!firstProc || firstProc->per.average_bursttime > p->per.average_bursttime){
+          firstProc = p;
+          min_val   = curr_val;
+        }
+      }
+    }
+
+    #endif // IF FCFS/SRT/CFSD
+
     if(firstProc){
       acquire(&firstProc->lock);
 
-      p->per.retime += ticks - p->last_runnable_time;
       firstProc->state = RUNNING; // Release the table only when firstProc start to run
+      firstProc->last_running_time = ticks;
       release(&proc_table_lock);
       c->proc = firstProc;
-      firstProc->last_running_time = ticks;
       swtch(&c->context, &firstProc->context);
 
       c->proc = 0;
 
-      p->per.rutime +=  ticks - p->last_running_time;
       release(&firstProc->lock);
     }
     else { //No process to run - avoid null
       release(&proc_table_lock);
     }
 
-    // ------------------------------------- SRT -----------------------------------------
-  
-    #elif SRT // Scheduler set to Shortest Remaining Time (SCHEDFLAG= SRT)
-
-    // ------------------------------------- CFSD ----------------------------------------
-    
-    #elif CFSD // Scheduler set to Completely Fair Schedular with Priority decay(SCHEDFLAG=CFSD).
-
-    #endif
+    #endif // IF DEFAULT
 
   }
 
@@ -581,7 +626,6 @@ yield(void)
   p->per.average_bursttime = curr_running_time*ALPHA + ((DIVPARAM-ALPHA)*p->per.average_bursttime)/DIVPARAM;
 
   p->state = RUNNABLE;
-  // p->last_runnable_time = ticks;
 
   sched();
   release(&p->lock);
@@ -625,8 +669,6 @@ sleep(void *chan, struct spinlock *lk)
 
   acquire(&p->lock);  //DOC: sleeplock1
   release(lk);
-
-  // p->per.rutime += ticks - p->last_running_time;
 
   // Go to sleep.
   p->chan = chan;
@@ -746,10 +788,12 @@ procdump(void)
   }
 }
 
-void
+int
 trace(int mask){
   struct proc *p = myproc();
+  if(mask < 0) return -1;
   p->mask = mask;
+  return 0;
 }
 
 

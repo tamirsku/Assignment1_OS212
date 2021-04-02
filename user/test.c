@@ -10,12 +10,12 @@ int
 main(void)
 {
   struct perf p;
-  int mask = (1 << SYS_wait_stat) | (1 << SYS_fork);
+  int mask = (1 << SYS_wait_stat) | (1 << SYS_fork) | (1 << SYS_set_priority);
 
   trace(mask);
   if(fork() == 0){
-    sleep(5);
-    printf("print from royboy\n");
+    sleep(7);
+    set_priority(5);
   }
   else{
     wait_stat(0,&p);  

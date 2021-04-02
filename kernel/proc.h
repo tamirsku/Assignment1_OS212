@@ -84,6 +84,15 @@ struct trapframe {
 
 enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
+typedef enum {
+    NOT_EXIST          = 0,
+    TEST_HIGH_PRIORITY = 1,
+    HIGH_PRIORITY      = 2,
+    NORMAL_PRIORITY    = 3,
+    LOW_PRIORITY       = 4,
+    TEST_LOW_PRIORITY  = 5
+} process_priority_e;
+
 // Per-process state
 struct proc {
   struct spinlock lock;
@@ -106,12 +115,11 @@ struct proc {
   struct context context;      // swtch() here to run process
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
-  struct perf per;            // Assignemt 1, Task 3 OS212 
+  struct perf per;             // Assignemt 1, Task 3 OS212 
   char name[16];               // Process name (debugging)
   int mask;                    // Mask for trace
   int curr_quantum;            // How much time the process running ( = zero if not running / get kicked out)
   int last_running_time;       // Last tick that the process was running
-  // int last_sleeping_time;       // Last tick that the process was sleeping
-  // int last_runnable_time;       // Last tick that the process was runnable
+  process_priority_e priority; // Process Priority
 };
 

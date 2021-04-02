@@ -122,9 +122,7 @@ sys_trace(void)
   if(argint(0, &mask) < 0)
     return -1;
   
-  trace(mask);
-
-  return 0;
+  return trace(mask);
 }
 
 uint64
@@ -140,4 +138,17 @@ sys_wait_stat(void)
     return -1;
   
   return wait(p,per);
+}
+
+uint64
+sys_set_priority(void){
+  uint64       p;
+  struct proc *pr = myproc();
+
+  if(argaddr(0, &p) < 0 || p < TEST_HIGH_PRIORITY || p > TEST_LOW_PRIORITY)
+    return -1;
+
+  pr->priority = p;
+  
+  return 0;
 }

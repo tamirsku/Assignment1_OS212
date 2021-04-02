@@ -108,10 +108,14 @@ void            yield(void);
 int             either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
 int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
-void            trace(int);
+int             trace(int);
+#define         RUNNING_TIME(prss)         (prss->per.rutime)
+#define         RUNNABLE_TIME(prss)        (prss->per.retime)
+#define         SLEEPING_TIME(prss)        (prss->per.stime)      
 #define         IS_BIT_ON(bit)             (p->mask & (1 << bit))
 #define         GENERIC_TRACE_PRINT(bit)   (printf("syscall %s -> %d\n",syscalls_to_string[bit - 1],p->trapframe->a0))
-#define         TRACE_CHECK_AND_PRINT(bit) if(IS_BIT_ON(bit)) GENERIC_TRACE_PRINT(bit)     
+#define         TRACE_CHECK_AND_PRINT(bit) if(IS_BIT_ON(bit)) GENERIC_TRACE_PRINT(bit)
+#define         CALC_PRIORITY_VAL(prss)    ((RUNNING_TIME(prss)*get_decay_factor(prss->priority))/(RUNNING_TIME(prss)+SLEEPING_TIME(prss)))            
 
 // swtch.S
 void            swtch(struct context*, struct context*);

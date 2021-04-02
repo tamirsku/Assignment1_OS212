@@ -13,5 +13,5 @@
 #define MAXPATH      512   // maximum file path name
 #define QUANTUM      5
 #define ALPHA        50
-#define NSYSCALLS    23
+#define NSYSCALLS    24
 #define DIVPARAM     100
