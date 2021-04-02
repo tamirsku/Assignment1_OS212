@@ -117,7 +117,6 @@ allocproc(void)
       release(&p->lock);
     }
   }
-  printf("no place in tbl\n");
   return 0;
 
 found:
@@ -295,7 +294,6 @@ fork(void)
 
   // Allocate process.
   if((np = allocproc()) == 0){
-    printf("no proc alloced\n");
     return -1;
   }
 
