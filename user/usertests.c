@@ -7,6 +7,7 @@
 #include "kernel/syscall.h"
 #include "kernel/memlayout.h"
 #include "kernel/riscv.h"
+#include "kernel/performence.h"
 
 //
 // Tests xv6 system calls.  usertests without arguments runs them all
@@ -2617,6 +2618,47 @@ badarg(char *s)
   exit(0);
 }
 
+void mytest(char *s){
+    printf("started\n");
+
+    int pid2;
+    if ((pid2 = fork()) == 0)
+    {
+        int c = 0;
+        while (c < 3)
+        {
+            printf("child is running\n");
+            sleep(10);
+            c++;
+        }
+        while (c < 15000)
+        {
+            printf("%d", c);
+            c++;
+        }
+        printf("\n");
+    }
+    else
+    {
+        int status;
+        struct perf p;
+
+        int x = wait_stat(&status, &p);
+
+        printf("ret val: %d ", x);
+        printf("ctime: %d ", p.ctime);
+        printf("ttime: %d ", p.ttime);
+        printf("stime: %d ", p.stime);
+        printf("retime: %d ", p.retime);
+        printf("rutime: %d\n", p.rutime);
+    }
+
+    sleep(1);
+    sbrk(4096);
+
+    exit(0);
+}
+
 // test the exec() code that cleans up if it runs out
 // of memory. it's really a test that such a condition
 // doesn't cause a panic.
@@ -2831,6 +2873,7 @@ main(int argc, char *argv[])
     {iref, "iref"},
     {forktest, "forktest"},
     {bigdir, "bigdir"}, // slow
+    {mytest, "mytest"},
     { 0, 0},
   };
 

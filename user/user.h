@@ -25,7 +25,7 @@ char* sbrk(int);
 int sleep(int);
 int uptime(void);
 int trace(int);
-int wait_stat(int,struct perf*);
+int wait_stat(int*,struct perf*);
 int set_priority(int);
 
 // ulib.c
