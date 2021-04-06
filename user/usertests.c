@@ -2649,6 +2649,9 @@ execout(char *s)
     } else {
       wait((int*)0);
     }
+    set_priority(5);
+    set_priority(7);
+    set_priority(-1);
   }
 
   exit(0);

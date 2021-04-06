@@ -185,7 +185,6 @@ kerneltrap()
   if(which_dev == 2){
         
     if(running_proc != 0 && running_proc->state == RUNNING && ++running_proc->curr_quantum == QUANTUM){
-      running_proc->curr_quantum = 0;
       yield();
     }
   }

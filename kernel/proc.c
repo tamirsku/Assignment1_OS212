@@ -511,6 +511,7 @@ scheduler(void)
         p->state = RUNNING;
         c->proc = p;
         p->last_running_time = ticks;
+        p->curr_quantum = 0;
         swtch(&c->context, &p->context);
 
         // Process is done running for now.
@@ -579,6 +580,7 @@ scheduler(void)
       firstProc->last_running_time = ticks;
       release(&proc_table_lock);
       c->proc = firstProc;
+      firstProc->curr_quantum = 0;
       swtch(&c->context, &firstProc->context);
 
       c->proc = 0;
