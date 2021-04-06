@@ -519,7 +519,7 @@ scheduler(void)
         c->proc = 0;
 
         curr_burst = ticks - p->last_running_time;
-        p->per.average_bursttime = curr_burst*ALPHA + ((DIVPARAM-ALPHA)*p->per.average_bursttime);
+        p->per.average_bursttime = curr_burst*ALPHA + ((DIVPARAM-ALPHA)*p->per.average_bursttime)/DIVPARAM;
       }
       release(&p->lock);
     }
@@ -798,11 +798,22 @@ procdump(void)
 }
 
 int
-trace(int mask){
-  struct proc *p = myproc();
-  if(mask < 0) return -1;
-  p->mask = mask;
-  return 0;
+trace(int mask,int pid){
+  struct proc *p;
+
+  if(mask < 0 || pid < 0) return -1;
+
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    if(p->pid == pid){
+      p->mask = mask;
+      release(&p->lock);
+      return 0;
+    }
+    release(&p->lock);
+  }
+  
+  return -1;
 }
 
 

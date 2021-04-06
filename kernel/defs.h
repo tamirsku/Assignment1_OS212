@@ -108,7 +108,7 @@ void            yield(void);
 int             either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
 int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
-int             trace(int);
+int             trace(int,int);
 #define         RUNNING_TIME(prss)         (prss->per.rutime)
 #define         RUNNABLE_TIME(prss)        (prss->per.retime)
 #define         SLEEPING_TIME(prss)        (prss->per.stime)      
