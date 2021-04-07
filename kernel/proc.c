@@ -510,8 +510,8 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
-        p->last_running_time = ticks;
         p->curr_quantum = 0;
+        p->last_running_time = ticks;
         swtch(&c->context, &p->context);
 
         // Process is done running for now.
@@ -577,16 +577,15 @@ scheduler(void)
       acquire(&firstProc->lock);
 
       firstProc->state = RUNNING; // Release the table only when firstProc start to run
-      firstProc->last_running_time = ticks;
       release(&proc_table_lock);
       c->proc = firstProc;
       firstProc->curr_quantum = 0;
+      firstProc->last_running_time = ticks;
       swtch(&c->context, &firstProc->context);
 
       c->proc = 0;
       curr_burst = ticks - firstProc->last_running_time;
-      firstProc->per.average_bursttime = curr_burst*ALPHA + ((DIVPARAM-ALPHA)*firstProc->per.average_bursttime);
-      firstProc->last_running_time = ticks;
+      firstProc->per.average_bursttime = curr_burst*ALPHA + ((DIVPARAM-ALPHA)*firstProc->per.average_bursttime)/DIVPARAM;
 
       release(&firstProc->lock);
     }
