@@ -124,14 +124,14 @@ sys_trace(void)
     return -1;
 
   if(argint(1, &pid) < 0)
-    return -1; 
-  
+    return -1;
+
   return trace(mask,pid);
 }
 
 uint64
 sys_wait_stat(void)
-{ 
+{
   uint64 p;
   uint64 per;
 
@@ -140,7 +140,7 @@ sys_wait_stat(void)
 
   if(argaddr(1, &per) < 0)
     return -1;
-  
+
   return wait(p,per);
 }
 
@@ -153,6 +153,6 @@ sys_set_priority(void){
     return -1;
 
   pr->priority = p;
-  
+
   return 0;
 }

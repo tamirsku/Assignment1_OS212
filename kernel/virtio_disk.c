@@ -31,7 +31,7 @@ static struct disk {
   // used), as explained in Section 2.6 of the virtio specification
   // for the legacy interface.
   // https://docs.oasis-open.org/virtio/virtio/v1.1/virtio-v1.1.pdf
-  
+
   // the first region of pages[] is a set (not a ring) of DMA
   // descriptors, with which the driver tells the device where to read
   // and write individual disk operations. there are NUM descriptors.
@@ -68,9 +68,9 @@ static struct disk {
   // disk command headers.
   // one-for-one with descriptors, for convenience.
   struct virtio_blk_req ops[NUM];
-  
+
   struct spinlock vdisk_lock;
-  
+
 } __attribute__ ((aligned (PGSIZE))) disk;
 
 void
@@ -86,7 +86,7 @@ virtio_disk_init(void)
      *R(VIRTIO_MMIO_VENDOR_ID) != 0x554d4551){
     panic("could not find virtio disk");
   }
-  
+
   status |= VIRTIO_CONFIG_S_ACKNOWLEDGE;
   *R(VIRTIO_MMIO_STATUS) = status;
 

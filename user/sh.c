@@ -65,7 +65,7 @@ void run_cmd_on_path(int pathfd, struct execcmd *cmd){
     close(pathfd);
     return;
   } // Read file into buf
-  
+
   close(pathfd);
   while(*j){
     if(*j == ':'){
@@ -95,7 +95,7 @@ runcmd(struct cmd *cmd)
 
   if(cmd == 0)
     exit(1);
-  
+
   switch(cmd->type){
   default:
     panic("runcmd");

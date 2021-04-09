@@ -15,6 +15,9 @@ struct spinlock proc_table_lock;
 
 struct proc *initproc;
 
+struct queue procs_queue;
+struct spinlock queue_lock;
+
 int nextpid = 1;
 struct spinlock pid_lock;
 
@@ -35,7 +38,7 @@ struct spinlock wait_lock;
 void
 proc_mapstacks(pagetable_t kpgtbl) {
   struct proc *p;
-  
+
   for(p = proc; p < &proc[NPROC]; p++) {
     char *pa = kalloc();
     if(pa == 0)
@@ -50,13 +53,19 @@ void
 procinit(void)
 {
   struct proc *p;
-  
+
   initlock(&pid_lock, "nextpid");
   initlock(&wait_lock, "wait_lock");
+  initlock(&queue_lock,"queue lock");
   for(p = proc; p < &proc[NPROC]; p++) {
       initlock(&p->lock, "proc");
       p->kstack = KSTACK((int) (p - proc));
   }
+
+  procs_queue.size = 0;
+  procs_queue.front = 0;
+  procs_queue.rear = -1;
+
 }
 
 // Must be called with interrupts disabled,
@@ -91,7 +100,7 @@ myproc(void) {
 int
 allocpid() {
   int pid;
-  
+
   acquire(&pid_lock);
   pid = nextpid;
   nextpid = nextpid + 1;
@@ -244,7 +253,7 @@ userinit(void)
   initproc = p;
 
   initlock(&proc_table_lock,"table lock");
-  
+
   // allocate one user page and copy init's instructions
   // and data into it.
   uvminit(p->pagetable, initcode, sizeof(initcode));
@@ -259,6 +268,10 @@ userinit(void)
 
   p->state = RUNNABLE;
   p->per.ctime = ticks;
+
+  #ifdef FCFS
+  enqueue(&procs_queue,p);
+  #endif
 
   release(&p->lock);
 }
@@ -332,6 +345,9 @@ fork(void)
   np->per.ctime = ticks;
   np->mask = p->mask;
   np->priority = p->priority;
+  #ifdef FCFS
+  enqueue(&procs_queue,p);
+  #endif
   release(&np->lock);
 
   return pid;
@@ -384,7 +400,7 @@ exit(int status)
 
   // Parent might be sleeping in wait().
   wakeup(p->parent);
-  
+
   acquire(&p->lock);
 
   p->xstate = status;
@@ -446,7 +462,7 @@ wait(uint64 addr,uint64 per_ptr)
       release(&wait_lock);
       return -1;
     }
-    
+
     // Wait for a child to exit.
     sleep(p, &wait_lock);  //DOC: wait-sleep
   }
@@ -462,7 +478,7 @@ int get_decay_factor(process_priority_e p){
   case HIGH_PRIORITY:
     return 3;
     break;
-  
+
   case NORMAL_PRIORITY:
     return 5;
     break;
@@ -487,9 +503,10 @@ int get_decay_factor(process_priority_e p){
 void
 scheduler(void)
 {
+  #ifndef FCFS
   struct proc* p;
+  #endif
   struct cpu * c = mycpu();
-  // int entry_time = ticks;
   int curr_burst = 0;
 
   c->proc = 0;
@@ -528,24 +545,37 @@ scheduler(void)
 
     struct proc* firstProc = 0;
 
-    acquire(&proc_table_lock);
-
     // ------------------------------------- FCFS -----------------------------------------
 
     #ifdef FCFS // Scheduler set to First Come First Serve (SCHEDFLAG= FCFS)
 
-    for(p = proc; p < &proc[NPROC]; p++) {
-      if(p->state == RUNNABLE) {
-        if(!firstProc || firstProc->last_running_time > p->last_running_time){
-          firstProc = p;
-        }
+    // for(p = proc; p < &proc[NPROC]; p++) {
+    //   if(p->state == RUNNABLE) {
+    //     if(!firstProc || firstProc->last_running_time > p->last_running_time){
+    //       firstProc = p;
+    //     }
+    //   }
+    // }
+    // printf("dequeue1 in scheduler");
+    firstProc = dequeue(&procs_queue);
+    if(firstProc){
+      if(firstProc->state != RUNNABLE){
+        enqueue(&procs_queue,firstProc); //Do not run, lose place in queue
+        // printf("not runnable \n");
       }
+      else{
+        firstProc = 0;
+      }
+    }
+    else{
+      // printf("im null\n");
     }
 
     // ------------------------------------- SRT -----------------------------------------
 
     #elif SRT // Scheduler set to Shortest Remaining Time (SCHEDFLAG= SRT)
 
+    acquire(&proc_table_lock);
     for(p = proc; p < &proc[NPROC]; p++) {
       if(p->state == RUNNABLE) {
         if(!firstProc || firstProc->per.average_bursttime > p->per.average_bursttime){
@@ -560,10 +590,10 @@ scheduler(void)
 
     int min_val  = -1;
     int curr_val = -1;
-
+    acquire(&proc_table_lock);
     for(p = proc; p < &proc[NPROC]; p++) {
       if(p->state == RUNNABLE) {
-        curr_val = RUNNING_TIME(p) + SLEEPING_TIME(p) == 0 ? 0 : CALC_PRIORITY_VAL(p); 
+        curr_val = RUNNING_TIME(p) + SLEEPING_TIME(p) == 0 ? 0 : CALC_PRIORITY_VAL(p);
         if(!firstProc || min_val > curr_val){
           firstProc = p;
           min_val   = curr_val;
@@ -577,7 +607,11 @@ scheduler(void)
       acquire(&firstProc->lock);
 
       firstProc->state = RUNNING; // Release the table only when firstProc start to run
+
+      #ifndef FCFS // Do not need to mess with tbl when in FCFS
       release(&proc_table_lock);
+      #endif
+
       c->proc = firstProc;
       firstProc->curr_quantum = 0;
       firstProc->last_running_time = ticks;
@@ -587,11 +621,17 @@ scheduler(void)
       curr_burst = ticks - firstProc->last_running_time;
       firstProc->per.average_bursttime = curr_burst*ALPHA + ((DIVPARAM-ALPHA)*firstProc->per.average_bursttime)/DIVPARAM;
 
+      #ifdef FCFS
+      enqueue(&procs_queue,firstProc);
+      #endif
+
       release(&firstProc->lock);
     }
+    #ifndef FCFS
     else { //No process to run - avoid null
       release(&proc_table_lock);
     }
+    #endif // ifndef FCFS
 
     #endif // IF DEFAULT
 
@@ -670,7 +710,7 @@ void
 sleep(void *chan, struct spinlock *lk)
 {
   struct proc *p = myproc();
-  
+
   // Must acquire p->lock in order to
   // change p->state and then call sched.
   // Once we hold p->lock, we can be
@@ -811,9 +851,39 @@ trace(int mask,int pid){
     }
     release(&p->lock);
   }
-  
+
   return -1;
 }
 
 
+void enqueue(struct queue *pt, struct proc* x)
+{
+    acquire(&queue_lock);
+    if (CAPACITY(pt) == SIZE)
+    {
+        release(&queue_lock);
+        panic("Queue full");
+    }
 
+    pt->rear = (pt->rear + 1) % SIZE;
+    pt->items[pt->rear] = x;
+    pt->size++;
+    release(&queue_lock);
+}
+
+struct proc* dequeue(struct queue *pt)
+{
+  acquire(&queue_lock);
+  struct proc* item = 0;
+  if (IS_EMPTY(pt))    // front == rear
+    {
+      release(&queue_lock);
+      return item;
+    }
+
+    item = pt->items[pt->front];
+    pt->front = (pt->front + 1) % SIZE;  // circular queue
+    pt->size--;
+    release(&queue_lock);
+    return item;
+}

@@ -84,6 +84,22 @@ void            printf(char*, ...);
 void            panic(char*) __attribute__((noreturn));
 void            printfinit(void);
 
+// queue.c
+#define SIZE NCPU*NPROC
+#define CAPACITY(q) (q->size)
+#define IS_EMPTY(q) (!q->size)
+
+struct queue
+{
+    struct proc* items[SIZE];
+    int front;
+    int rear;
+    int size;
+};
+
+void enqueue(struct queue *pt, struct proc* x); //Insert
+struct proc* dequeue(struct queue *pt); //Remove
+
 // proc.c
 int             cpuid(void);
 void            exit(int);
@@ -111,11 +127,11 @@ void            procdump(void);
 int             trace(int,int);
 #define         RUNNING_TIME(prss)         (prss->per.rutime)
 #define         RUNNABLE_TIME(prss)        (prss->per.retime)
-#define         SLEEPING_TIME(prss)        (prss->per.stime)      
+#define         SLEEPING_TIME(prss)        (prss->per.stime)
 #define         IS_BIT_ON(bit)             (p->mask & (1 << bit))
 #define         GENERIC_TRACE_PRINT(bit)   (printf("syscall %s -> %d\n",syscalls_to_string[bit - 1],p->trapframe->a0))
 #define         TRACE_CHECK_AND_PRINT(bit) if(IS_BIT_ON(bit)) GENERIC_TRACE_PRINT(bit)
-#define         CALC_PRIORITY_VAL(prss)    ((RUNNING_TIME(prss)*get_decay_factor(prss->priority))/(RUNNING_TIME(prss)+SLEEPING_TIME(prss)))            
+#define         CALC_PRIORITY_VAL(prss)    ((RUNNING_TIME(prss)*get_decay_factor(prss->priority))/(RUNNING_TIME(prss)+SLEEPING_TIME(prss)))
 
 // swtch.S
 void            swtch(struct context*, struct context*);
@@ -195,5 +211,7 @@ void            virtio_disk_init(void);
 void            virtio_disk_rw(struct buf *, int);
 void            virtio_disk_intr(void);
 
+
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
+
