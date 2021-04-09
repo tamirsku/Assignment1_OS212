@@ -85,7 +85,7 @@ void            panic(char*) __attribute__((noreturn));
 void            printfinit(void);
 
 // queue.c
-#define SIZE NCPU*NPROC
+#define SIZE 512 // NPROC * NCPU
 #define CAPACITY(q) (q->size)
 #define IS_EMPTY(q) (!q->size)
 

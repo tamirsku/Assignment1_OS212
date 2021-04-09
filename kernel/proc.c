@@ -346,7 +346,7 @@ fork(void)
   np->mask = p->mask;
   np->priority = p->priority;
   #ifdef FCFS
-  enqueue(&procs_queue,p);
+  enqueue(&procs_queue,np);
   #endif
   release(&np->lock);
 
@@ -561,14 +561,9 @@ scheduler(void)
     if(firstProc){
       if(firstProc->state != RUNNABLE){
         enqueue(&procs_queue,firstProc); //Do not run, lose place in queue
+        firstProc = 0;
         // printf("not runnable \n");
       }
-      else{
-        firstProc = 0;
-      }
-    }
-    else{
-      // printf("im null\n");
     }
 
     // ------------------------------------- SRT -----------------------------------------
@@ -622,7 +617,8 @@ scheduler(void)
       firstProc->per.average_bursttime = curr_burst*ALPHA + ((DIVPARAM-ALPHA)*firstProc->per.average_bursttime)/DIVPARAM;
 
       #ifdef FCFS
-      enqueue(&procs_queue,firstProc);
+      if(firstProc->state == SLEEPING || firstProc->state == RUNNABLE)
+        enqueue(&procs_queue,firstProc);
       #endif
 
       release(&firstProc->lock);
