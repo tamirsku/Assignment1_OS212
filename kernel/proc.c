@@ -549,14 +549,6 @@ scheduler(void)
 
     #ifdef FCFS // Scheduler set to First Come First Serve (SCHEDFLAG= FCFS)
 
-    // for(p = proc; p < &proc[NPROC]; p++) {
-    //   if(p->state == RUNNABLE) {
-    //     if(!firstProc || firstProc->last_running_time > p->last_running_time){
-    //       firstProc = p;
-    //     }
-    //   }
-    // }
-    // printf("dequeue1 in scheduler");
     firstProc = dequeue(&procs_queue);
     if(firstProc){
       if(firstProc->state != RUNNABLE){
